@@ -15,7 +15,7 @@ public class LootCategoryMixin {
     @Inject(method = "forItem", at = @At("RETURN"), cancellable = true)
     private static void HeavyWeaponCategory(ItemStack itemStack, CallbackInfoReturnable<LootCategory> ci) {
         if (net.minecraftforge.fml.ModList.get().isLoaded("bettercombat")) {
-            if (ci.getReturnValue() == LootCategory.SWORD) {
+            if (ci.getReturnValue() == LootCategory.SWORD || ci.getReturnValue() == LootCategory.SHIELD) {
                 WeaponAttributes weaponAttributes = WeaponRegistry.getAttributes(itemStack);
                 if (weaponAttributes != null && weaponAttributes.isTwoHanded()) {
                     ci.setReturnValue(LootCategory.HEAVY_WEAPON);
