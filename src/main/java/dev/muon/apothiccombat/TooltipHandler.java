@@ -5,6 +5,7 @@ import dev.shadowsoffire.apotheosis.affix.AttributeAffix;
 import net.bettercombat.api.WeaponAttributes;
 import net.bettercombat.logic.WeaponRegistry;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlotGroup;
@@ -12,6 +13,7 @@ import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.neoforged.api.distmarker.Dist;
@@ -22,7 +24,9 @@ import net.neoforged.neoforge.event.ItemAttributeModifierEvent;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 
 @EventBusSubscriber(modid = ApothicCombat.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
@@ -81,6 +85,8 @@ public class TooltipHandler {
     public static void onTooltip(ItemTooltipEvent event) {
         ItemStack stack = event.getItemStack();
         List<Component> tooltip = event.getToolTip();
+        Player player = event.getEntity();
+        if (!(player instanceof LocalPlayer)) return;
 
         WeaponAttributes attributes = WeaponRegistry.getAttributes(stack);
         if (attributes == null) return;
@@ -120,7 +126,15 @@ public class TooltipHandler {
     private static void addAttackRangeTooltip(ItemTooltipEvent event, ItemStack stack, List<Component> tooltip, WeaponAttributes attributes) {
         for (int i = 0; i < tooltip.size(); i++) {
             if (tooltip.get(i).toString().contains("attribute.name.generic.attack_range")) {
-                ModifierTracker tracker = new ModifierTracker(event.getEntity().getAttribute(Attributes.ENTITY_INTERACTION_RANGE).getBaseValue());
+                Player player = event.getEntity();
+                if (!(player instanceof LocalPlayer)) return;
+                AttributeInstance entityRange = player.getAttribute(Attributes.ENTITY_INTERACTION_RANGE);
+                if (entityRange == null) {
+                    ApothicCombat.LOGGER.warn("Player {} has no entity interaction range attribute!", event.getEntity().getDisplayName());
+                    return;
+                }
+
+                ModifierTracker tracker = new ModifierTracker(entityRange.getBaseValue());
                 double totalRange = calculateTotalRange(event, stack, attributes, tracker);
 
                 if (event.getFlags().hasShiftDown()) {
@@ -133,32 +147,48 @@ public class TooltipHandler {
         }
     }
 
-
     private static double calculateTotalRange(ItemTooltipEvent event, ItemStack stack, WeaponAttributes attributes, ModifierTracker tracker) {
-        AttributeInstance reachAttr = event.getEntity().getAttribute(Attributes.ENTITY_INTERACTION_RANGE);
+        Player player = event.getEntity();
+        AttributeInstance reachAttr = player.getAttribute(Attributes.ENTITY_INTERACTION_RANGE);
         if (reachAttr == null) return attributes.attackRange();
 
         double baseReach = reachAttr.getBaseValue();
+        ItemStack equippedStack = player.getMainHandItem();
+        // TODO: Maybe make this a config whitelist for item id's/attr id's
+        Set<String> equippedModifierIds = new HashSet<>();
+        equippedModifierIds.add("aether:valkyrie_tool_entity_interaction_range");
+        equippedStack.getAttributeModifiers().modifiers().stream()
+                .filter(entry -> entry.attribute().value() == Attributes.ENTITY_INTERACTION_RANGE)
+                .map(entry -> entry.modifier().id().toString())
+                .forEach(equippedModifierIds::add);
 
-        // Add all entity modifiers
-        reachAttr.getModifiers().forEach(modifier -> tracker.addModifier(modifier, baseReach));
+        for (AttributeModifier modifier : reachAttr.getModifiers()) {
+            if (!equippedModifierIds.contains(modifier.id().toString())) {
+                tracker.addModifier(modifier, baseReach);
+            }
+        }
 
-        // Remove equipped item's modifiers to avoid double-counting
-        deduplicateEquippedModifiers(event.getEntity().getMainHandItem(), tracker, baseReach);
-
-        // Add viewed item's modifiers
+        deduplicateHeldDirectModifiers(equippedStack, tracker, baseReach);
+        deduplicateHeldAffixModifiers(equippedStack, tracker, baseReach);
         addViewedItemModifiers(stack, tracker, baseReach);
 
         return attributes.attackRange() + (tracker.totalModifiedReach - baseReach);
     }
 
-    private static void deduplicateEquippedModifiers(ItemStack equippedStack, ModifierTracker tracker, double baseReach) {
+    private static void deduplicateHeldAffixModifiers(ItemStack equippedStack, ModifierTracker tracker, double baseReach) {
         ModifierCapturingEvent equippedCaptureEvent = new ModifierCapturingEvent(equippedStack);
         AffixHelper.streamAffixes(equippedStack)
                 .filter(inst -> inst.getAffix() instanceof AttributeAffix)
                 .forEach(inst -> ((AttributeAffix) inst.getAffix()).addModifiers(inst, equippedCaptureEvent));
 
         equippedCaptureEvent.getCapturedModifiers()
+                .forEach(modifier -> tracker.subtractModifier(modifier, baseReach));
+    }
+
+    private static void deduplicateHeldDirectModifiers(ItemStack equippedStack, ModifierTracker tracker, double baseReach) {
+        equippedStack.getAttributeModifiers().modifiers().stream()
+                .filter(entry -> entry.attribute().value() == Attributes.ENTITY_INTERACTION_RANGE)
+                .map(ItemAttributeModifiers.Entry::modifier)
                 .forEach(modifier -> tracker.subtractModifier(modifier, baseReach));
     }
 
@@ -175,33 +205,19 @@ public class TooltipHandler {
 
     private static void addExpandedRangeTooltip(List<Component> tooltip, int index, double totalRange, WeaponAttributes attributes, ModifierTracker tracker) {
         List<Component> modifierLines = new ArrayList<>();
-        ApothicCombat.LOGGER.info("=== Creating expanded tooltip ===");
-        ApothicCombat.LOGGER.info("Current tooltip lines:");
-        for (int i = 0; i < tooltip.size(); i++) {
-            ApothicCombat.LOGGER.info("{}: {}", i, tooltip.get(i));
-        }
-        // Total line in gold
         tooltip.set(index, createTotalRangeComponent(totalRange, ChatFormatting.GOLD));
 
-        // Base value in green
         modifierLines.add(createBaseWeaponRangeComponent(attributes.attackRange(), ChatFormatting.DARK_GREEN));
 
-        // Add modifier lines
         for (AttributeModifier modifier : tracker.applicableModifiers) {
             modifierLines.add(createModifierComponents(modifier));
         }
-
-        // Replace existing modifiers with new ones
         int nextSectionStart = findModifierSectionEnd(tooltip, index, "attack_range");
         if (index + 1 < nextSectionStart) {
             tooltip.subList(index + 1, nextSectionStart).clear();
         }
 
         tooltip.addAll(index + 1, modifierLines);
-        ApothicCombat.LOGGER.info("=== Final tooltip lines ===");
-        for (int i = 0; i < tooltip.size(); i++) {
-            ApothicCombat.LOGGER.info("{}: {}", i, tooltip.get(i));
-        }
     }
 
 
