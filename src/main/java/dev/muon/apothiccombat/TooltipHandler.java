@@ -136,11 +136,13 @@ public class TooltipHandler {
 
                 ModifierTracker tracker = new ModifierTracker(entityRange.getBaseValue());
                 double totalRange = calculateTotalRange(event, stack, attributes, tracker);
+                double baseWeaponRange = attributes.rangeBonus() + Attributes.ENTITY_INTERACTION_RANGE.value().getDefaultValue();
+                boolean hasModifications = Math.abs(totalRange - baseWeaponRange) > 0.001;
 
-                if (event.getFlags().hasShiftDown()) {
+                if (event.getFlags().hasShiftDown() && hasModifications) {
                     addExpandedRangeTooltip(tooltip, i, totalRange, attributes, tracker);
                 } else {
-                    addCondensedRangeTooltip(tooltip, i, totalRange, tracker);
+                    addCondensedRangeTooltip(tooltip, i, totalRange, hasModifications, tracker);
                 }
                 break;
             }
@@ -149,8 +151,9 @@ public class TooltipHandler {
 
     private static double calculateTotalRange(ItemTooltipEvent event, ItemStack stack, WeaponAttributes attributes, ModifierTracker tracker) {
         Player player = event.getEntity();
+        if (player == null) return attributes.rangeBonus() + Attributes.ENTITY_INTERACTION_RANGE.value().getDefaultValue();
         AttributeInstance reachAttr = player.getAttribute(Attributes.ENTITY_INTERACTION_RANGE);
-        if (reachAttr == null) return attributes.attackRange();
+        if (reachAttr == null) return attributes.rangeBonus() + Attributes.ENTITY_INTERACTION_RANGE.value().getDefaultValue();
 
         double baseReach = reachAttr.getBaseValue();
         ItemStack equippedStack = player.getMainHandItem();
@@ -172,7 +175,7 @@ public class TooltipHandler {
         deduplicateHeldAffixModifiers(equippedStack, tracker, baseReach);
         addViewedItemModifiers(stack, tracker, baseReach);
 
-        return attributes.attackRange() + (tracker.totalModifiedReach - baseReach);
+        return attributes.rangeBonus() + Attributes.ENTITY_INTERACTION_RANGE.value().getDefaultValue() + (tracker.totalModifiedReach - baseReach);
     }
 
     private static void deduplicateHeldAffixModifiers(ItemStack equippedStack, ModifierTracker tracker, double baseReach) {
@@ -207,7 +210,7 @@ public class TooltipHandler {
         List<Component> modifierLines = new ArrayList<>();
         tooltip.set(index, createTotalRangeComponent(totalRange, ChatFormatting.GOLD));
 
-        modifierLines.add(createBaseWeaponRangeComponent(attributes.attackRange(), ChatFormatting.DARK_GREEN));
+        modifierLines.add(createBaseWeaponRangeComponent(attributes.rangeBonus() + Attributes.ENTITY_INTERACTION_RANGE.value().getDefaultValue(), ChatFormatting.DARK_GREEN));
 
         for (AttributeModifier modifier : tracker.applicableModifiers) {
             modifierLines.add(createModifierComponents(modifier));
@@ -220,10 +223,9 @@ public class TooltipHandler {
         tooltip.addAll(index + 1, modifierLines);
     }
 
-
-    private static void addCondensedRangeTooltip(List<Component> tooltip, int index, double totalRange, ModifierTracker tracker) {
+    private static void addCondensedRangeTooltip(List<Component> tooltip, int index, double totalRange, boolean hasModifications, ModifierTracker tracker) {
         tooltip.set(index, createTotalRangeComponent(totalRange,
-                !tracker.applicableModifiers.isEmpty() ? ChatFormatting.GOLD : ChatFormatting.DARK_GREEN));
+                hasModifications ? ChatFormatting.GOLD : ChatFormatting.DARK_GREEN));
     }
 
     private static Component createTotalRangeComponent(double range, ChatFormatting color) {
