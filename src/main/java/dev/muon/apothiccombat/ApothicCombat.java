@@ -17,7 +17,6 @@ public class ApothicCombat {
         modEventBus.addListener(this::commonSetup);
         ApothicCombat.LOGGER.info("Loading Apothic Combat");
 
-        AttackRangeHandler.init();
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.muon.apothiccombat.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "apothiccombat.refmap.json",
+  "mixins": [
+    "WeaponAttributeTooltipMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
