@@ -190,24 +190,14 @@ public class TooltipHandler {
 
     private static void addExpandedRangeTooltip(List<Component> tooltip, int index, double totalRange, WeaponAttributes attributes, ModifierTracker tracker) {
         List<Component> modifierLines = new ArrayList<>();
-        tooltip.set(index, createTotalRangeComponent(totalRange, ChatFormatting.GOLD));
-
+        modifierLines.add(createTotalRangeComponent(totalRange, ChatFormatting.GOLD));
         modifierLines.add(createBaseWeaponRangeComponent(attributes.rangeBonus() + Attributes.ENTITY_INTERACTION_RANGE.value().getDefaultValue(), ChatFormatting.DARK_GREEN));
 
         for (AttributeModifier modifier : tracker.applicableModifiers) {
             modifierLines.add(createModifierComponents(modifier));
         }
-        int nextSectionStart = findModifierSectionEnd(tooltip, index, "attack_range");
-        if (index + 1 < nextSectionStart) {
-            tooltip.subList(index + 1, nextSectionStart).clear();
-        }
 
-        tooltip.addAll(index + 1, modifierLines);
-    }
-
-    private static void addCondensedRangeTooltip(List<Component> tooltip, int index, double totalRange, boolean hasModifications, ModifierTracker tracker) {
-        tooltip.set(index, createTotalRangeComponent(totalRange,
-                hasModifications ? ChatFormatting.GOLD : ChatFormatting.DARK_GREEN));
+        tooltip.addAll(index, modifierLines);
     }
 
     private static Component createTotalRangeComponent(double range, ChatFormatting color) {
