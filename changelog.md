@@ -1,3 +1,6 @@
+## 1.2.1
+- Fix one more tiny tooltip bug
+
 ## 1.2.0
 - Update for Better Combat 2.1.3
 - Don't "ignore" built-in Entity Reach modifiers, defer to them entirely (to follow Better Combat's new design philosophy)
