@@ -42,12 +42,7 @@ repositories {
     }
 
     maven {
-        // Change when needed
-        // url "https://maven.theillusivec4.top/"
-        url "https://maven.octo-studios.com/releases"
-        content {
-            includeGroupByRegex "top\\.theillusivec4.*"
-        }
+        url "https://maven.theillusivec4.top/"
     }
     maven {
         url "https://maven.blamejared.com"
